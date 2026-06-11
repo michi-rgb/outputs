@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG Generator — Ollama qwen3</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f0f13;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    background: linear-gradient(135deg, #a78bfa, #60a5fa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    font-size: 0.8rem;
+    color: #666;
+    margin-bottom: 2rem;
+  }
+
+  .card {
+    background: #1a1a24;
+    border: 1px solid #2a2a3a;
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 780px;
+    margin-bottom: 1.5rem;
+  }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  textarea {
+    width: 100%;
+    background: #0f0f13;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+    resize: vertical;
+    min-height: 80px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus { border-color: #7c3aed; }
+
+  .row {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  button {
+    padding: 0.6rem 1.4rem;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #generateBtn {
+    background: linear-gradient(135deg, #7c3aed, #2563eb);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  #downloadBtn {
+    background: #1e293b;
+    color: #94a3b8;
+    border: 1px solid #334155;
+    display: none;
+  }
+
+  #clearBtn {
+    background: transparent;
+    color: #666;
+    border: 1px solid #2a2a3a;
+  }
+
+  .hint {
+    font-size: 0.75rem;
+    color: #555;
+    margin-left: auto;
+  }
+
+  #status {
+    font-size: 0.85rem;
+    min-height: 1.2em;
+    margin-top: 0.75rem;
+  }
+
+  .status-loading { color: #facc15; }
+  .status-ok      { color: #4ade80; }
+  .status-err     { color: #f87171; }
+
+  #preview {
+    width: 100%;
+    max-width: 780px;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    display: none;
+    padding: 1rem;
+  }
+
+  #preview svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  #rawToggle {
+    font-size: 0.75rem;
+    color: #555;
+    cursor: pointer;
+    text-decoration: underline;
+    margin-top: 0.5rem;
+    display: inline-block;
+  }
+
+  #rawCode {
+    display: none;
+    background: #0f0f13;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 0.5rem;
+    width: 100%;
+    max-width: 780px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #555;
+    border-top-color: #facc15;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<h1>SVG Generator</h1>
+<p class="subtitle">Powered by Ollama · qwen3.5:latest</p>
+
+<div class="card">
+  <label for="prompt">説明を入力（日本語・英語どちらでも）</label>
+  <textarea id="prompt" placeholder="例: 夕暮れの山と川の風景　/ A simple red apple with a green leaf"></textarea>
+
+  <div class="row">
+    <button id="generateBtn" onclick="generate()">✦ 生成</button>
+    <button id="downloadBtn" onclick="download()">↓ SVGをダウンロード</button>
+    <button id="clearBtn" onclick="clearAll()">クリア</button>
+    <span class="hint">Ctrl+Enter でも生成</span>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<div id="preview"></div>
+<span id="rawToggle" style="display:none" onclick="toggleRaw()">▼ SVGコードを表示</span>
+<pre id="rawCode"></pre>
+
+<script>
+let currentSvg = '';
+
+document.getElementById('prompt').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) generate();
+});
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status-' + type;
+  el.innerHTML = msg;
+}
+
+function extractSvg(text) {
+  // Try to find <svg ...>...</svg> block
+  const match = text.match(/<svg[\s\S]*?<\/svg>/i);
+  return match ? match[0] : null;
+}
+
+async function generate() {
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) { setStatus('説明を入力してください。', 'err'); return; }
+
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  document.getElementById('downloadBtn').style.display = 'none';
+  document.getElementById('preview').style.display = 'none';
+  document.getElementById('rawToggle').style.display = 'none';
+  document.getElementById('rawCode').style.display = 'none';
+  currentSvg = '';
+
+  setStatus('<span class="spinner"></span>生成中...', 'loading');
+
+  const systemPrompt = 'You are an SVG artist. Output ONLY raw SVG code. No explanation, no markdown fences, no comments outside the SVG. Start your response with <svg and end with </svg>.';
+  const userPrompt = `Generate a clean, detailed SVG image of: ${prompt}. The SVG should have a viewBox, use shapes, paths, and colors to represent the scene or object realistically. Output ONLY the SVG code.`;
+
+  try {
+    const res = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'qwen3.5:latest',
+        prompt: userPrompt,
+        system: systemPrompt,
+        stream: false,
+        options: { temperature: 0.7, num_predict: 4096 }
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`Ollama API エラー: ${res.status} ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    const raw = data.response || '';
+
+    const svg = extractSvg(raw);
+    if (!svg) {
+      setStatus('SVGの抽出に失敗しました。モデルの出力を確認してください。', 'err');
+      document.getElementById('rawCode').textContent = raw;
+      document.getElementById('rawCode').style.display = 'block';
+      document.getElementById('rawToggle').style.display = 'none';
+      btn.disabled = false;
+      return;
+    }
+
+    currentSvg = svg;
+
+    // Show preview
+    const preview = document.getElementById('preview');
+    preview.innerHTML = svg;
+    preview.style.display = 'block';
+
+    document.getElementById('rawCode').textContent = svg;
+    document.getElementById('rawToggle').style.display = 'inline-block';
+    document.getElementById('downloadBtn').style.display = 'inline-block';
+
+    setStatus('✓ 生成完了', 'ok');
+
+  } catch (err) {
+    let msg = err.message;
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      msg = 'Ollamaに接続できません。<br>・Ollamaが起動しているか確認してください（<code>ollama serve</code>）<br>・CORS エラーの場合は環境変数 <code>OLLAMA_ORIGINS=*</code> を設定してください';
+    }
+    setStatus(msg, 'err');
+  }
+
+  btn.disabled = false;
+}
+
+function download() {
+  if (!currentSvg) return;
+  const blob = new Blob([currentSvg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'generated.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearAll() {
+  document.getElementById('prompt').value = '';
+  document.getElementById('preview').style.display = 'none';
+  document.getElementById('rawToggle').style.display = 'none';
+  document.getElementById('rawCode').style.display = 'none';
+  document.getElementById('downloadBtn').style.display = 'none';
+  document.getElementById('status').textContent = '';
+  currentSvg = '';
+}
+
+function toggleRaw() {
+  const el = document.getElementById('rawCode');
+  const toggle = document.getElementById('rawToggle');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    toggle.textContent = '▲ SVGコードを隠す';
+  } else {
+    el.style.display = 'none';
+    toggle.textContent = '▼ SVGコードを表示';
+  }
+}
+</script>
+</body>
+</html>

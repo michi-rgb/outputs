@@ -1,0 +1,12 @@
+{
+  "name": "opcua-mock-server",
+  "version": "1.0.0",
+  "description": "OPC-UA モックサーバー（Node-RED テスト用）",
+  "main": "mock-server.js",
+  "scripts": {
+    "start": "node mock-server.js"
+  },
+  "dependencies": {
+    "node-opcua": "^2.119.0"
+  }
+}

@@ -1,0 +1,193 @@
+[
+  {
+    "id": "opcua_flow_tab",
+    "type": "tab",
+    "label": "OPC-UA → CSV",
+    "disabled": false,
+    "info": "OPC-UAサーバーからデータを受信してCSVファイルに保存するフロー"
+  },
+  {
+    "id": "opcua_endpoint_config",
+    "type": "OpcUa-Client",
+    "z": "opcua_flow_tab",
+    "name": "OPC-UA Server",
+    "endpoint": "opc.tcp://localhost:4840",
+    "secpol": "None",
+    "secmode": "None",
+    "login": false,
+    "usercredentials": false,
+    "x": 0,
+    "y": 0
+  },
+
+  {
+    "id": "comment_settings",
+    "type": "comment",
+    "z": "opcua_flow_tab",
+    "name": "★ 設定変更はここ: OPC-UAエンドポイント・ノードID",
+    "info": "1. opcua_endpoint_config ノードのエンドポイントURLを変更\n2. 各 opcua_subscribe_* ノードの item を変更\n3. 右上の「デプロイ」ボタンをクリック",
+    "x": 250,
+    "y": 40,
+    "wires": []
+  },
+
+  {
+    "id": "inject_start",
+    "type": "inject",
+    "z": "opcua_flow_tab",
+    "name": "起動時に自動開始",
+    "props": [{"p": "payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 1,
+    "topic": "",
+    "payload": "start",
+    "payloadType": "str",
+    "x": 160,
+    "y": 120,
+    "wires": [["opcua_subscribe_1001", "opcua_subscribe_1002", "opcua_subscribe_1003"]]
+  },
+
+  {
+    "id": "opcua_subscribe_1001",
+    "type": "OpcUa-Item",
+    "z": "opcua_flow_tab",
+    "item": "ns=1;i=1001",
+    "datatype": "Double",
+    "topic": "ns=1;i=1001",
+    "name": "Temperature (ns=1;i=1001)",
+    "x": 430,
+    "y": 100,
+    "wires": [["func_format_data"]]
+  },
+  {
+    "id": "opcua_subscribe_1002",
+    "type": "OpcUa-Item",
+    "z": "opcua_flow_tab",
+    "item": "ns=1;i=1002",
+    "datatype": "Double",
+    "topic": "ns=1;i=1002",
+    "name": "Pressure (ns=1;i=1002)",
+    "x": 430,
+    "y": 160,
+    "wires": [["func_format_data"]]
+  },
+  {
+    "id": "opcua_subscribe_1003",
+    "type": "OpcUa-Item",
+    "z": "opcua_flow_tab",
+    "item": "ns=1;i=1003",
+    "datatype": "Double",
+    "topic": "ns=1;i=1003",
+    "name": "FlowRate (ns=1;i=1003)",
+    "x": 430,
+    "y": 220,
+    "wires": [["func_format_data"]]
+  },
+
+  {
+    "id": "func_format_data",
+    "type": "function",
+    "z": "opcua_flow_tab",
+    "name": "データ整形",
+    "func": "// OPC-UAから受信したデータをCSV用に整形\nconst payload = msg.payload;\n\n// タイムスタンプ\nconst ts = payload.sourceTimestamp\n  ? new Date(payload.sourceTimestamp).toISOString()\n  : new Date().toISOString();\n\n// ノードID\nconst nodeId = msg.topic || payload.nodeId || 'unknown';\n\n// 値\nconst value = payload.value !== undefined ? payload.value : payload;\n\n// データ型\nconst dataType = payload.dataType || typeof value;\n\n// ステータス\nconst status = payload.statusCode\n  ? (payload.statusCode.name || payload.statusCode.toString())\n  : 'Good';\n\n// CSVの1行データとして格納\nmsg.csvRow = { ts, nodeId, value, dataType, status };\nreturn msg;",
+    "outputs": 1,
+    "x": 660,
+    "y": 160,
+    "wires": [["func_buffer"]]
+  },
+
+  {
+    "id": "func_buffer",
+    "type": "function",
+    "z": "opcua_flow_tab",
+    "name": "バッファ (100件 or 30秒)",
+    "func": "// バッファ設定\nconst BUFFER_SIZE = 100;  // ← 件数でフラッシュする閾値\nconst FLUSH_INTERVAL_MS = 30000;  // ← 時間でフラッシュする間隔(ms)\n\n// コンテキストからバッファを取得\nconst buffer = context.get('buffer') || [];\nconst lastFlush = context.get('lastFlush') || Date.now();\n\nif (msg.flush) {\n  // 手動フラッシュ\n  if (buffer.length === 0) return null;\n  context.set('buffer', []);\n  context.set('lastFlush', Date.now());\n  msg.csvRows = buffer;\n  return msg;\n}\n\nif (msg.csvRow) {\n  buffer.push(msg.csvRow);\n  context.set('buffer', buffer);\n}\n\n// フラッシュ条件チェック\nconst now = Date.now();\nconst timeExceeded = (now - lastFlush) >= FLUSH_INTERVAL_MS;\nconst sizeExceeded = buffer.length >= BUFFER_SIZE;\n\nif (sizeExceeded || timeExceeded) {\n  if (buffer.length === 0) return null;\n  context.set('buffer', []);\n  context.set('lastFlush', now);\n  msg.csvRows = buffer;\n  return msg;\n}\n\nreturn null;",
+    "outputs": 1,
+    "x": 900,
+    "y": 160,
+    "wires": [["func_write_csv"]]
+  },
+
+  {
+    "id": "inject_flush",
+    "type": "inject",
+    "z": "opcua_flow_tab",
+    "name": "手動フラッシュ (CSV書き出し)",
+    "props": [{"p": "flush", "v": "true", "vt": "bool"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "topic": "",
+    "x": 670,
+    "y": 280,
+    "wires": [["func_buffer"]]
+  },
+
+  {
+    "id": "func_write_csv",
+    "type": "function",
+    "z": "opcua_flow_tab",
+    "name": "CSV書き込み",
+    "func": "const os = global.get('os') || require('os');\nconst path = global.get('path') || require('path');\nconst fs = global.get('fs') || require('fs');\n\n// 出力ディレクトリ\nconst outputDir = path.join(os.homedir(), 'opcua_data');\nif (!fs.existsSync(outputDir)) {\n  fs.mkdirSync(outputDir, { recursive: true });\n}\n\n// 今日の日付でファイル名を決定\nconst today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD\nconst filePath = path.join(outputDir, `opcua_${today}.csv`);\n\n// ヘッダーが必要か確認\nconst needHeader = !fs.existsSync(filePath);\n\n// CSVの行を生成\nconst rows = msg.csvRows;\nlet csvText = '';\nif (needHeader) {\n  csvText += 'timestamp,nodeId,value,dataType,status\\n';\n}\n\nrows.forEach(row => {\n  // 値にカンマ・改行が含まれる場合はダブルクォートで囲む\n  const escapeCSV = (v) => {\n    const s = String(v);\n    return s.includes(',') || s.includes('\\n') || s.includes('\"')\n      ? `\"${s.replace(/\"/g, '\"\"')}\"`\n      : s;\n  };\n  csvText += [\n    escapeCSV(row.ts),\n    escapeCSV(row.nodeId),\n    escapeCSV(row.value),\n    escapeCSV(row.dataType),\n    escapeCSV(row.status)\n  ].join(',') + '\\n';\n});\n\ntry {\n  fs.appendFileSync(filePath, csvText, 'utf8');\n  node.log(`CSV書き込み完了: ${rows.length}件 → ${filePath}`);\n  msg.payload = `✅ ${rows.length}件 → ${filePath}`;\n} catch (e) {\n  node.error('CSV書き込みエラー: ' + e.message);\n  msg.payload = '❌ エラー: ' + e.message;\n}\n\nreturn msg;",
+    "outputs": 1,
+    "x": 1130,
+    "y": 160,
+    "wires": [["debug_csv_status"]]
+  },
+
+  {
+    "id": "debug_csv_status",
+    "type": "debug",
+    "z": "opcua_flow_tab",
+    "name": "CSV書き込み状況",
+    "active": true,
+    "tosidebar": true,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 1360,
+    "y": 160,
+    "wires": []
+  },
+
+  {
+    "id": "catch_error",
+    "type": "catch",
+    "z": "opcua_flow_tab",
+    "name": "エラーキャッチ",
+    "scope": null,
+    "uncaught": false,
+    "x": 160,
+    "y": 400,
+    "wires": [["debug_error"]]
+  },
+  {
+    "id": "debug_error",
+    "type": "debug",
+    "z": "opcua_flow_tab",
+    "name": "エラーログ",
+    "active": true,
+    "tosidebar": true,
+    "complete": "true",
+    "targetType": "full",
+    "x": 400,
+    "y": 400,
+    "wires": []
+  },
+
+  {
+    "id": "inject_timer",
+    "type": "inject",
+    "z": "opcua_flow_tab",
+    "name": "30秒タイマー (自動フラッシュ)",
+    "props": [{"p": "flush", "v": "true", "vt": "bool"}],
+    "repeat": "30",
+    "crontab": "",
+    "once": false,
+    "topic": "",
+    "x": 680,
+    "y": 340,
+    "wires": [["func_buffer"]]
+  }
+]
