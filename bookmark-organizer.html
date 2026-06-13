@@ -531,7 +531,46 @@
 let fileContent = '';
 let resultHtml = '';
 let missingBookmarks = [];
+<<<<<<< HEAD
 let currentProvider = 'mistral';
+
+// --- APIキー 保存・復元 ---
+function saveKey(provider) {
+  const id = provider === 'gemini' ? 'apiKeyGemini' : 'apiKeyMistral';
+  const val = document.getElementById(id).value;
+  if (val) localStorage.setItem('bm_apiKey_' + provider, val);
+}
+
+function loadKeys() {
+  const g = localStorage.getItem('bm_apiKey_gemini');
+  const m = localStorage.getItem('bm_apiKey_mistral');
+  if (g) document.getElementById('apiKeyGemini').value = g;
+  if (m) document.getElementById('apiKeyMistral').value = m;
+}
+
+loadKeys();
+
+// --- ブックマーク URL 抽出 ---
+function extractUrls(html) {
+  const set = new Set();
+  const re = /<A HREF="([^"]+)"/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) set.add(m[1]);
+  return set;
+}
+
+function extractBookmarkList(html) {
+  const list = [];
+  const re = /<A HREF="([^"]+)"[^>]*>([^<]*)<\/A>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    list.push({ url: m[1], title: m[2].trim() || m[1] });
+  }
+  return list;
+}
+=======
+let currentProvider = 'gemini';
+>>>>>>> eba1fec25f8bdc543df2b70525be27aa5a051b71
 
 // --- APIキー 保存・復元 ---
 function saveKey(provider) {
