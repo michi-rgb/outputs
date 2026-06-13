@@ -305,6 +305,48 @@
     line-height: 1.6;
   }
 
+  .missing-card {
+    display: none;
+    background: #1a1210;
+    border: 1px solid #7c2d12;
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 700px;
+    margin-top: 1rem;
+  }
+
+  .missing-card.show { display: block; }
+
+  .missing-list {
+    margin-top: 0.75rem;
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 0.8rem;
+  }
+
+  .missing-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #2a1a10;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .missing-item:last-child { border-bottom: none; }
+
+  .missing-title { color: #fca5a5; font-weight: 600; }
+  .missing-url { color: #666; font-family: monospace; font-size: 0.72rem; word-break: break-all; }
+
+  .missing-dl {
+    background: #2a1208;
+    color: #f97316;
+    border: 1px solid #7c2d12;
+    margin-top: 0.75rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+
   .section-sep {
     width: 100%;
     max-width: 700px;
@@ -361,16 +403,16 @@
 <div class="card">
   <div class="card-title">🤖 AI プロバイダー選択</div>
   <div class="provider-tabs">
-    <button class="provider-tab active-gemini" id="tab-gemini" onclick="switchProvider('gemini')">Gemini (Google)</button>
-    <button class="provider-tab" id="tab-mistral" onclick="switchProvider('mistral')">Mistral AI</button>
+    <button class="provider-tab" id="tab-gemini" onclick="switchProvider('gemini')">Gemini (Google)</button>
+    <button class="provider-tab active-mistral" id="tab-mistral" onclick="switchProvider('mistral')">Mistral AI</button>
   </div>
 
   <!-- Gemini -->
-  <div id="pane-gemini">
+  <div id="pane-gemini" style="display:none">
     <div class="api-row">
       <div style="flex:1">
         <label for="apiKeyGemini">Google AI Studio の API キー</label>
-        <input type="password" id="apiKeyGemini" placeholder="AIza..." autocomplete="off" oninput="checkReady()">
+        <input type="password" id="apiKeyGemini" placeholder="AIza..." autocomplete="off" oninput="saveKey('gemini'); checkReady()">
       </div>
       <button class="btn-small" onclick="toggleKey('apiKeyGemini')">表示</button>
     </div>
@@ -381,11 +423,11 @@
   </div>
 
   <!-- Mistral -->
-  <div id="pane-mistral" style="display:none">
+  <div id="pane-mistral">
     <div class="api-row">
       <div style="flex:1">
         <label for="apiKeyMistral">Mistral AI の API キー</label>
-        <input type="password" id="apiKeyMistral" placeholder="..." autocomplete="off" oninput="checkReady()">
+        <input type="password" id="apiKeyMistral" placeholder="..." autocomplete="off" oninput="saveKey('mistral'); checkReady()">
       </div>
       <button class="btn-small" onclick="toggleKey('apiKeyMistral')">表示</button>
     </div>
@@ -396,7 +438,7 @@
       <label for="mistralModel">モデル</label>
       <select id="mistralModel" style="background:#0f0f13;border:1px solid #2a2a3a;border-radius:8px;color:#e0e0e0;padding:0.6rem 0.8rem;font-size:0.9rem;width:100%;outline:none">
         <option value="mistral-large-latest">mistral-large-latest — 最高精度・推奨（無料枠あり）</option>
-        <option value="mistral-small-latest">mistral-small-latest — 軽量・高速（無料枠あり）</option>
+        <option value="mistral-small-latest" selected>mistral-small-latest — 軽量・高速（無料枠あり）</option>
         <option value="open-mistral-nemo">open-mistral-nemo — オープンウェイト・高速（無料枠あり）</option>
         <option value="mistral-medium-latest">mistral-medium-latest — バランス型（無料枠あり）</option>
       </select>
@@ -477,10 +519,54 @@
   </p>
 </div>
 
+<!-- Missing bookmarks -->
+<div class="missing-card" id="missingCard">
+  <div class="card-title" style="color:#fca5a5">⚠️ 出力に含まれていないブックマーク</div>
+  <p style="font-size:0.8rem;color:#a16207;margin-bottom:0.25rem">以下のブックマークはAI出力に含まれていませんでした。手動で確認・追加してください。</p>
+  <div class="missing-list" id="missingList"></div>
+  <button class="missing-dl btn-download" onclick="downloadMissing()">⬇ 欠落ブックマークのみダウンロード</button>
+</div>
+
 <script>
 let fileContent = '';
 let resultHtml = '';
-let currentProvider = 'gemini';
+let missingBookmarks = [];
+let currentProvider = 'mistral';
+
+// --- APIキー 保存・復元 ---
+function saveKey(provider) {
+  const id = provider === 'gemini' ? 'apiKeyGemini' : 'apiKeyMistral';
+  const val = document.getElementById(id).value;
+  if (val) localStorage.setItem('bm_apiKey_' + provider, val);
+}
+
+function loadKeys() {
+  const g = localStorage.getItem('bm_apiKey_gemini');
+  const m = localStorage.getItem('bm_apiKey_mistral');
+  if (g) document.getElementById('apiKeyGemini').value = g;
+  if (m) document.getElementById('apiKeyMistral').value = m;
+}
+
+loadKeys();
+
+// --- ブックマーク URL 抽出 ---
+function extractUrls(html) {
+  const set = new Set();
+  const re = /<A HREF="([^"]+)"/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) set.add(m[1]);
+  return set;
+}
+
+function extractBookmarkList(html) {
+  const list = [];
+  const re = /<A HREF="([^"]+)"[^>]*>([^<]*)<\/A>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    list.push({ url: m[1], title: m[2].trim() || m[1] });
+  }
+  return list;
+}
 
 function switchProvider(p) {
   currentProvider = p;
@@ -655,11 +741,22 @@ ${cleaned}`;
     document.getElementById('statAfter').textContent = afterCount;
     document.getElementById('statFolders').textContent = folderCount;
 
-    const lost = originalCount - afterCount;
-    if (lost > 0) {
-      addLog(`⚠ 注意: ${lost} 件のブックマークが出力に含まれていない可能性があります。ダウンロード後に確認してください。`, 'err');
+    // 欠落ブックマーク検出
+    const originalUrls = extractUrls(fileContent);
+    const outputUrls = extractUrls(html);
+    const missingUrls = [...originalUrls].filter(u => !outputUrls.has(u));
+    missingBookmarks = [];
+
+    if (missingUrls.length > 0) {
+      // 元ファイルからタイトルも取得
+      const srcList = extractBookmarkList(fileContent);
+      const srcMap = new Map(srcList.map(b => [b.url, b.title]));
+      missingBookmarks = missingUrls.map(u => ({ url: u, title: srcMap.get(u) || u }));
+      addLog(`⚠ ${missingBookmarks.length} 件のブックマークが出力に含まれていません`, 'err');
+      showMissingCard();
     } else {
       addLog(`✓ 全 ${afterCount} 件のブックマークを保持`, 'ok');
+      document.getElementById('missingCard').classList.remove('show');
     }
 
     addLog(`✓ ${folderCount} フォルダに分類完了`, 'ok');
@@ -793,6 +890,42 @@ function togglePreview() {
     el.style.display = 'block';
     toggle.textContent = '▲ HTMLプレビューを隠す';
   }
+}
+
+function showMissingCard() {
+  const card = document.getElementById('missingCard');
+  const list = document.getElementById('missingList');
+  list.innerHTML = '';
+  for (const bm of missingBookmarks) {
+    const item = document.createElement('div');
+    item.className = 'missing-item';
+    item.innerHTML = `<div>
+      <div class="missing-title">${escHtml(bm.title)}</div>
+      <div class="missing-url">${escHtml(bm.url)}</div>
+    </div>`;
+    list.appendChild(item);
+  }
+  card.classList.add('show');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function downloadMissing() {
+  if (!missingBookmarks.length) return;
+  const rows = missingBookmarks.map(b => {
+    const esc = s => `"${String(s).replace(/"/g,'""')}"`;
+    return [esc(b.title), esc(b.url)].join(',');
+  });
+  const csv = 'title,url\n' + rows.join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'missing_bookmarks.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
