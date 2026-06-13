@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SVG Generator — Ollama qwen3</title>
+<title>SVG Generator — Ollama / Mistral</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -178,12 +178,130 @@
   }
 
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Provider tabs */
+  .provider-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .provider-tab {
+    padding: 0.35rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #2a2a3a;
+    background: #0f0f13;
+    color: #666;
+    font-size: 0.82rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+
+  .provider-tab.active-ollama {
+    border-color: #a78bfa;
+    background: #1a0f2e;
+    color: #a78bfa;
+  }
+
+  .provider-tab.active-mistral {
+    border-color: #f97316;
+    background: #1f1208;
+    color: #f97316;
+  }
+
+  .api-pane input[type="password"],
+  .api-pane input[type="text"] {
+    width: 100%;
+    background: #0f0f13;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 0.9rem;
+    padding: 0.6rem 0.9rem;
+    outline: none;
+    font-family: monospace;
+    transition: border-color 0.2s;
+    margin-bottom: 0.5rem;
+  }
+
+  .api-pane input:focus { border-color: #f97316; }
+
+  .api-pane select {
+    width: 100%;
+    background: #0f0f13;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.85rem;
+    outline: none;
+  }
+
+  .api-hint {
+    font-size: 0.72rem;
+    color: #555;
+    margin-top: 0.3rem;
+  }
+
+  .api-hint a { color: #60a5fa; text-decoration: none; }
+  .api-hint a:hover { text-decoration: underline; }
+
+  .api-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .api-row input { margin-bottom: 0; flex: 1; }
+
+  .btn-tiny {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.75rem;
+    background: #1e293b;
+    color: #94a3b8;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
 </style>
 </head>
 <body>
 
 <h1>SVG Generator</h1>
-<p class="subtitle">Powered by Ollama · qwen3.5:latest</p>
+<p class="subtitle">自然言語からベクター画像を生成</p>
+
+<!-- Provider selector -->
+<div class="card" style="margin-bottom:1rem">
+  <div class="provider-tabs">
+    <button class="provider-tab active-ollama" id="tab-ollama" onclick="switchProvider('ollama')">Ollama（ローカル）</button>
+    <button class="provider-tab" id="tab-mistral" onclick="switchProvider('mistral')">Mistral AI</button>
+  </div>
+
+  <!-- Ollama pane -->
+  <div class="api-pane" id="pane-ollama">
+    <label>モデル</label>
+    <input type="text" id="ollamaModel" value="qwen3.5:latest" style="margin-bottom:0.3rem;background:#0f0f13;border:1px solid #2a2a3a;border-radius:8px;color:#e0e0e0;font-size:0.9rem;padding:0.6rem 0.9rem;width:100%;outline:none;font-family:monospace">
+    <p class="api-hint">エンドポイント: <code style="color:#94a3b8">http://localhost:11434</code>　· 起動: <code style="color:#94a3b8">ollama serve</code>　· CORS: <code style="color:#94a3b8">OLLAMA_ORIGINS=*</code></p>
+  </div>
+
+  <!-- Mistral pane -->
+  <div class="api-pane" id="pane-mistral" style="display:none">
+    <label>API キー</label>
+    <div class="api-row" style="margin-bottom:0.5rem">
+      <input type="password" id="mistralKey" placeholder="APIキーを入力..." autocomplete="off">
+      <button class="btn-tiny" onclick="toggleMistralKey()">表示</button>
+    </div>
+    <label>モデル</label>
+    <select id="mistralModel">
+      <option value="mistral-large-latest">mistral-large-latest（高精度・推奨）</option>
+      <option value="mistral-small-latest">mistral-small-latest（軽量・高速）</option>
+      <option value="open-mistral-nemo">open-mistral-nemo（オープン・高速）</option>
+      <option value="codestral-latest">codestral-latest（コード特化）</option>
+    </select>
+    <p class="api-hint" style="margin-top:0.4rem">キーは <a href="https://console.mistral.ai/api-keys/" target="_blank">console.mistral.ai</a> から取得。全モデル無料枠（月1Bトークン）あり。</p>
+  </div>
+</div>
 
 <div class="card">
   <label for="prompt">説明を入力（日本語・英語どちらでも）</label>
@@ -205,6 +323,20 @@
 
 <script>
 let currentSvg = '';
+let currentProvider = 'ollama';
+
+function switchProvider(p) {
+  currentProvider = p;
+  document.getElementById('pane-ollama').style.display = p === 'ollama' ? '' : 'none';
+  document.getElementById('pane-mistral').style.display = p === 'mistral' ? '' : 'none';
+  document.getElementById('tab-ollama').className = 'provider-tab' + (p === 'ollama' ? ' active-ollama' : '');
+  document.getElementById('tab-mistral').className = 'provider-tab' + (p === 'mistral' ? ' active-mistral' : '');
+}
+
+function toggleMistralKey() {
+  const el = document.getElementById('mistralKey');
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
 
 document.getElementById('prompt').addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) generate();
@@ -222,9 +354,37 @@ function extractSvg(text) {
   return match ? match[0] : null;
 }
 
+async function callMistralAPI(apiKey, model, userPrompt, systemPrompt) {
+  const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      temperature: 0.7,
+      max_tokens: 4096,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ]
+    })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.message || `Mistral API エラー: HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content || '';
+}
+
 async function generate() {
   const prompt = document.getElementById('prompt').value.trim();
   if (!prompt) { setStatus('説明を入力してください。', 'err'); return; }
+
+  // Mistral選択時はAPIキー確認
+  if (currentProvider === 'mistral') {
+    const apiKey = document.getElementById('mistralKey').value.trim();
+    if (!apiKey) { setStatus('Mistral API キーを入力してください。', 'err'); return; }
+  }
 
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
@@ -240,24 +400,29 @@ async function generate() {
   const userPrompt = `Generate a clean, detailed SVG image of: ${prompt}. The SVG should have a viewBox, use shapes, paths, and colors to represent the scene or object realistically. Output ONLY the SVG code.`;
 
   try {
-    const res = await fetch('http://localhost:11434/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'qwen3.5:latest',
-        prompt: userPrompt,
-        system: systemPrompt,
-        stream: false,
-        options: { temperature: 0.7, num_predict: 4096 }
-      })
-    });
+    let raw = '';
 
-    if (!res.ok) {
-      throw new Error(`Ollama API エラー: ${res.status} ${res.statusText}`);
+    if (currentProvider === 'ollama') {
+      const model = document.getElementById('ollamaModel').value.trim() || 'qwen3.5:latest';
+      const res = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt: userPrompt,
+          system: systemPrompt,
+          stream: false,
+          options: { temperature: 0.7, num_predict: 4096 }
+        })
+      });
+      if (!res.ok) throw new Error(`Ollama API エラー: ${res.status} ${res.statusText}`);
+      const data = await res.json();
+      raw = data.response || '';
+    } else {
+      const apiKey = document.getElementById('mistralKey').value.trim();
+      const model = document.getElementById('mistralModel').value;
+      raw = await callMistralAPI(apiKey, model, userPrompt, systemPrompt);
     }
-
-    const data = await res.json();
-    const raw = data.response || '';
 
     const svg = extractSvg(raw);
     if (!svg) {
@@ -271,7 +436,6 @@ async function generate() {
 
     currentSvg = svg;
 
-    // Show preview
     const preview = document.getElementById('preview');
     preview.innerHTML = svg;
     preview.style.display = 'block';
