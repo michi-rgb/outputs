@@ -274,28 +274,28 @@
 <!-- Provider selector -->
 <div class="card" style="margin-bottom:1rem">
   <div class="provider-tabs">
-    <button class="provider-tab active-ollama" id="tab-ollama" onclick="switchProvider('ollama')">Ollama（ローカル）</button>
-    <button class="provider-tab" id="tab-mistral" onclick="switchProvider('mistral')">Mistral AI</button>
+    <button class="provider-tab" id="tab-ollama" onclick="switchProvider('ollama')">Ollama（ローカル）</button>
+    <button class="provider-tab active-mistral" id="tab-mistral" onclick="switchProvider('mistral')">Mistral AI</button>
   </div>
 
   <!-- Ollama pane -->
-  <div class="api-pane" id="pane-ollama">
+  <div class="api-pane" id="pane-ollama" style="display:none">
     <label>モデル</label>
     <input type="text" id="ollamaModel" value="qwen3.5:latest" style="margin-bottom:0.3rem;background:#0f0f13;border:1px solid #2a2a3a;border-radius:8px;color:#e0e0e0;font-size:0.9rem;padding:0.6rem 0.9rem;width:100%;outline:none;font-family:monospace">
     <p class="api-hint">エンドポイント: <code style="color:#94a3b8">http://localhost:11434</code>　· 起動: <code style="color:#94a3b8">ollama serve</code>　· CORS: <code style="color:#94a3b8">OLLAMA_ORIGINS=*</code></p>
   </div>
 
   <!-- Mistral pane -->
-  <div class="api-pane" id="pane-mistral" style="display:none">
-    <label>API キー</label>
+  <div class="api-pane" id="pane-mistral">
+    <label>API キー <span style="color:#555;font-size:0.7rem">（環境変数 MISTRAL_API_KEY を設定するか、ここに入力）</span></label>
     <div class="api-row" style="margin-bottom:0.5rem">
-      <input type="password" id="mistralKey" placeholder="APIキーを入力..." autocomplete="off">
+      <input type="password" id="mistralKey" placeholder="APIキーを入力..." autocomplete="off" oninput="saveMistralKey()">
       <button class="btn-tiny" onclick="toggleMistralKey()">表示</button>
     </div>
     <label>モデル</label>
     <select id="mistralModel">
       <option value="mistral-large-latest">mistral-large-latest（高精度・推奨）</option>
-      <option value="mistral-small-latest">mistral-small-latest（軽量・高速）</option>
+      <option value="mistral-small-latest" selected>mistral-small-latest（軽量・高速）</option>
       <option value="open-mistral-nemo">open-mistral-nemo（オープン・高速）</option>
       <option value="codestral-latest">codestral-latest（コード特化）</option>
     </select>
@@ -323,7 +323,17 @@
 
 <script>
 let currentSvg = '';
-let currentProvider = 'ollama';
+let currentProvider = 'mistral';
+
+// APIキーをlocalStorageに保存・復元
+function saveMistralKey() {
+  const v = document.getElementById('mistralKey').value;
+  if (v) localStorage.setItem('svg_mistralKey', v);
+}
+(function loadMistralKey() {
+  const v = localStorage.getItem('svg_mistralKey');
+  if (v) document.getElementById('mistralKey').value = v;
+})();
 
 function switchProvider(p) {
   currentProvider = p;
